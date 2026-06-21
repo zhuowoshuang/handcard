@@ -20,9 +20,19 @@ const ExcalidrawCanvas = dynamic(
   { ssr: false }
 );
 
-const W = 1080;
-const H = 1920;
 type SceneUpdate = Parameters<ExcalidrawImperativeAPI["updateScene"]>[0];
+
+// ── 画幅比例 ──
+type RatioId = "9:16" | "3:4" | "1:1" | "4:3" | "16:9";
+const ratios: { id: RatioId; label: string; w: number; h: number; desc: string }[] = [
+  { id: "9:16", label: "9:16", w: 1080, h: 1920, desc: "竖屏短视频" },
+  { id: "3:4",  label: "3:4",  w: 1080, h: 1440, desc: "小红书图文" },
+  { id: "1:1",  label: "1:1",  w: 1080, h: 1080, desc: "正方形" },
+  { id: "4:3",  label: "4:3",  w: 1440, h: 1080, desc: "横屏图文" },
+  { id: "16:9", label: "16:9", w: 1920, h: 1080, desc: "横屏视频" },
+];
+const defaultRatio: RatioId = "3:4";
+const getRatio = (id: RatioId) => ratios.find((r) => r.id === id) || ratios[1];
 
 type Slide = {
   id: string;
@@ -30,6 +40,7 @@ type Slide = {
   scene: ExcalidrawSceneData;
   templateId: TemplateId;
   presetId: PresetId;
+  ratioId: RatioId;
   input: string;
 };
 
@@ -47,6 +58,7 @@ function createEmptySlide(): Slide {
     scene: { elements: [], appState: { viewBackgroundColor: "#ffffff", currentItemFontFamily: 1, currentItemStrokeColor: "#111111" } },
     templateId: defaultTemplateId,
     presetId: defaultPresetId,
+    ratioId: defaultRatio,
     input: defaultTpl.defaultInput
   };
 }
@@ -96,6 +108,10 @@ export function CardGenerator() {
     updateActive({ presetId: id });
   }, [updateActive]);
 
+  const handleSelectRatio = useCallback((id: RatioId) => {
+    updateActive({ ratioId: id });
+  }, [updateActive]);
+
   const handleGenerate = useCallback(() => {
     setBusy("gen");
     setError(null);
@@ -117,7 +133,8 @@ export function CardGenerator() {
 
     (async () => {
       try {
-        const next = await buildExcalidrawScene(active.card!, { width: W, height: H }, active.presetId);
+        const ratio = getRatio(active.ratioId);
+        const next = await buildExcalidrawScene(active.card!, { width: ratio.w, height: ratio.h }, active.presetId);
         if (cancelled) return;
         setSlides((prev) => prev.map((s) => (s.id === slideId ? { ...s, scene: next } : s)));
         const api = apisRef.current[slideId];
@@ -217,18 +234,21 @@ export function CardGenerator() {
     if (!api) return;
     setBusy("export");
     setError(null);
+    const ratio = getRatio(active.ratioId);
     try {
       await exportSceneToPng({
         elements: api.getSceneElements(),
         files: api.getFiles() ?? null,
-        fileName: `${active.card?.title || "knowledge-card"}.png`
+        fileName: `${active.card?.title || "knowledge-card"}.png`,
+        width: ratio.w,
+        height: ratio.h
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "导出失败");
     } finally {
       setBusy(null);
     }
-  }, [active.id, active.card?.title]);
+  }, [active.id, active.card?.title, active.ratioId]);
 
   // ── 新增/删除 slide ──
   const handleAddSlide = useCallback(() => {
@@ -329,6 +349,22 @@ export function CardGenerator() {
             </div>
           </section>
 
+          {/* ── 画幅比例 ── */}
+          <section className="sidebar-section">
+            <h2 className="sidebar-heading">画幅比例</h2>
+            <div className="style-strip">
+              {ratios.map((r) => (
+                <button type="button" key={r.id}
+                  className={`style-chip ${active.ratioId === r.id ? "style-chip--active" : ""}`}
+                  onClick={() => handleSelectRatio(r.id)}
+                  title={r.desc}
+                  style={active.ratioId === r.id ? { background: "var(--accent)", color: "#fff" } : undefined}>
+                  <span className="style-chip-name">{r.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
           {/* ── 输入 ── */}
           <section className="sidebar-section sidebar-section--grow">
             <h2 className="sidebar-heading">输入文案</h2>
@@ -388,7 +424,10 @@ export function CardGenerator() {
                 return (
                   <div key={slide.id} className={`carousel-card ${idx === activeIdx ? "carousel-card--active" : ""}`}
                     onClick={() => scrollToSlide(idx)}>
-                    <div className="carousel-canvas" style={{ background: presetBgMap[slide.presetId] || "#fff" }}>
+                    <div className="carousel-canvas" style={{
+                      background: presetBgMap[slide.presetId] || "#fff",
+                      aspectRatio: `${getRatio(slide.ratioId).w} / ${getRatio(slide.ratioId).h}`
+                    }}>
                       {slide.card ? (
                         <ExcalidrawCanvas
                           excalidrawAPI={(api) => handleApi(slide.id, api)}

@@ -617,7 +617,7 @@ button, textarea { font: inherit; }
 
 .carousel-canvas {
   flex: 1;
-  aspect-ratio: 9 / 16;
+  aspect-ratio: 3 / 4;
   overflow: hidden;
   min-height: 0;
   background: #fff;

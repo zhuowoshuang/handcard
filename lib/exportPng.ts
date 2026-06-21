@@ -8,16 +8,21 @@ type ExportOpts = {
   elements: readonly ExcalidrawElement[];
   files: BinaryFiles | null;
   fileName: string;
+  /** 可选：指定导出尺寸（保持画幅比例） */
+  width?: number;
+  height?: number;
 };
 
 /**
  * 导出 Excalidraw 场景为 PNG。
- * 不指定 getDimensions，让 Excalidraw 自动根据元素边界计算画布大小。
+ * 指定 width/height 时按该比例导出；否则自动根据元素边界裁切。
  */
 export async function exportSceneToPng({
   elements,
   files,
-  fileName
+  fileName,
+  width,
+  height
 }: ExportOpts) {
   const excalidraw = await import("@excalidraw/excalidraw");
 
@@ -27,6 +32,8 @@ export async function exportSceneToPng({
     exportWithDarkMode: false
   } as Partial<AppState>;
 
+  const hasDims = width && height;
+
   let blob: Blob | null = null;
 
   // 方式一：exportToBlob
@@ -35,8 +42,9 @@ export async function exportSceneToPng({
       elements,
       files,
       mimeType: "image/png",
-      exportPadding: 60,
-      appState: commonAppState
+      exportPadding: hasDims ? 0 : 60,
+      appState: commonAppState,
+      ...(hasDims ? { getDimensions: () => ({ width: width!, height: height!, scale: 1 }) } : {})
     });
   } catch {
     // 方式二：exportToCanvas → toBlob
@@ -45,7 +53,8 @@ export async function exportSceneToPng({
         elements,
         files,
         appState: commonAppState,
-        exportPadding: 60
+        exportPadding: hasDims ? 0 : 60,
+        ...(hasDims ? { getDimensions: () => ({ width: width!, height: height!, scale: 1 }) } : {})
       });
 
       blob = await new Promise<Blob | null>((resolve) => {
