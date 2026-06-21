@@ -60,14 +60,14 @@ function generateBackground(p: StylePreset, w: number, h: number, rng: SeededRan
   const els: any[] = [];
   const bg = p.background;
 
-  // 纸张底色
+  // 纸张底色（同时作为导出边界锚点，strokeColor 不能是 transparent）
   els.push({
     type: "rectangle",
     x: 0, y: 0, width: w, height: h,
-    strokeColor: "transparent",
+    strokeColor: bg.color,
     backgroundColor: bg.color,
     fillStyle: "solid",
-    strokeWidth: 0, roughness: 0, opacity: 100,
+    strokeWidth: 1, roughness: 0, opacity: 100,
     roundness: null, groupIds: [], seed: rng.int(1, 999999)
   });
 
