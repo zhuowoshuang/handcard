@@ -64,7 +64,7 @@ export function CardGenerator() {
   const [busy, setBusy] = useState<null | "gen" | "export">(null);
   const [error, setError] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
-  const [zoom, setZoom] = useState(50);
+  const [zoom, setZoom] = useState(70);
   const carouselRef = useRef<HTMLDivElement>(null);
 
   const apisRef = useRef<Record<string, ExcalidrawImperativeAPI>>({});
@@ -109,7 +109,7 @@ export function CardGenerator() {
     }
   }, [active.input, active.templateId, updateActive]);
 
-  // ── 生成后同步场景 + 自动适配 ──
+  // ── 生成后同步场景 + 自动居中到可读 zoom ──
   useEffect(() => {
     if (!active.card) return;
     const slideId = active.id;
@@ -123,16 +123,15 @@ export function CardGenerator() {
         const api = apisRef.current[slideId];
         if (api) {
           api.updateScene({ elements: next.elements, appState: next.appState as SceneUpdate["appState"] } as SceneUpdate);
-          // 自动适配到最佳比例
+          // 设置可读 zoom 并居中到内容
           requestAnimationFrame(() => {
             if (cancelled) return;
             try {
-              api.scrollToContent(api.getSceneElements(), { fitToContent: true });
-              // 读取适配后的 zoom 并保存
-              const currentZoom = api.getAppState().zoom.value;
-              const sliderVal = zoomToSlider(currentZoom);
+              const targetZoom = 0.65;
+              api.updateScene({ appState: { zoom: { value: targetZoom as any } } } as SceneUpdate);
+              api.scrollToContent(api.getSceneElements(), { fitToContent: false });
+              const sliderVal = zoomToSlider(targetZoom);
               zoomsRef.current[slideId] = sliderVal;
-              // 如果当前正在看这张 slide，更新 slider 显示
               if (slides[activeIdx]?.id === slideId) {
                 setZoom(sliderVal);
               }
@@ -188,7 +187,18 @@ export function CardGenerator() {
     api.updateScene({ appState: { zoom: { value: z as any } } } as SceneUpdate);
   }, [active.id, activeIdx, slides]);
 
-  // ── 一键适配 ──
+  // ── 设置指定 zoom 并居中 ──
+  const applyZoom = useCallback((targetZoom: number) => {
+    const api = apisRef.current[active.id];
+    if (!api) return;
+    api.updateScene({ appState: { zoom: { value: targetZoom as any } } } as SceneUpdate);
+    api.scrollToContent(api.getSceneElements(), { fitToContent: false });
+    const sliderVal = zoomToSlider(targetZoom);
+    zoomsRef.current[active.id] = sliderVal;
+    setZoom(sliderVal);
+  }, [active.id]);
+
+  // ── 适配全部内容（zoom out）──
   const handleFit = useCallback(() => {
     const api = apisRef.current[active.id];
     if (!api) return;
@@ -360,7 +370,12 @@ export function CardGenerator() {
             <input type="range" className="zoom-slider" min={0} max={100} step={1} value={zoom}
               aria-label="缩放比例" onChange={(e) => handleZoomChange(Number(e.target.value))} />
             <button type="button" className="zoom-btn" onClick={() => handleZoomChange(Math.min(100, zoom + 15))} title="放大">+</button>
-            <button type="button" className="zoom-btn zoom-btn--fit" onClick={handleFit} title="适配画面">⊞</button>
+            <span className="zoom-value">{Math.round(sliderToZoom(zoom) * 100)}%</span>
+            <button type="button" className="zoom-btn zoom-btn--fit" onClick={handleFit} title="适配全部">⊞</button>
+            <button type="button" className={`zoom-preset ${Math.abs(zoom - zoomToSlider(0.5)) < 3 ? "zoom-preset--active" : ""}`} onClick={() => applyZoom(0.5)} title="50%">50%</button>
+            <button type="button" className={`zoom-preset ${Math.abs(zoom - zoomToSlider(0.65)) < 3 ? "zoom-preset--active" : ""}`} onClick={() => applyZoom(0.65)} title="阅读">📖</button>
+            <button type="button" className={`zoom-preset ${Math.abs(zoom - zoomToSlider(1.0)) < 3 ? "zoom-preset--active" : ""}`} onClick={() => applyZoom(1.0)} title="100%">100%</button>
+            <button type="button" className={`zoom-preset ${Math.abs(zoom - zoomToSlider(1.5)) < 3 ? "zoom-preset--active" : ""}`} onClick={() => applyZoom(1.5)} title="150%">150%</button>
             <span className="toolbar-divider" />
             <button type="button" className="zoom-btn" onClick={handleAddSlide} title="新增页面">＋</button>
             <button type="button" className="zoom-btn" onClick={handleDeleteSlide} disabled={slides.length <= 1} title="删除页面">🗑</button>
