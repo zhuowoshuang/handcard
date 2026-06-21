@@ -75,7 +75,6 @@ export function CardGenerator() {
   const [activeIdx, setActiveIdx] = useState(0);
   const [busy, setBusy] = useState<null | "gen" | "export">(null);
   const [error, setError] = useState<string | null>(null);
-  const [showJson, setShowJson] = useState(false);
   const [zoom, setZoom] = useState(70);
   const carouselRef = useRef<HTMLDivElement>(null);
 
@@ -365,35 +364,22 @@ export function CardGenerator() {
             </div>
           </section>
 
-          {/* ── 输入 ── */}
-          <section className="sidebar-section sidebar-section--grow">
+          {/* ── 输入 + 操作 ── */}
+          <section className="sidebar-section sidebar-section--grow sidebar-section--input">
             <h2 className="sidebar-heading">输入文案</h2>
             <textarea className="input-area" value={active.input}
               onChange={(e) => updateActive({ input: e.target.value })}
               placeholder={currentTemplate.placeholder} spellCheck={false} />
-          </section>
-
-          {/* ── 按钮 ── */}
-          <div className="action-bar">
-            <button type="button" className="btn btn--primary" onClick={handleGenerate} disabled={busy !== null}>
-              {busy === "gen" ? <><span className="spinner" /> 生成中…</> : <><span className="btn-icon">⚡</span> 生成预览</>}
-            </button>
-            <button type="button" className="btn btn--ghost" onClick={handleExport} disabled={!apisRef.current[active.id] || busy !== null}>
-              {busy === "export" ? <><span className="spinner" /> 导出中…</> : <><span className="btn-icon">📥</span> 导出 PNG</>}
-            </button>
-          </div>
-
-          {error && <p className="error-msg">{error}</p>}
-
-          {active.card && (
-            <div className="json-panel">
-              <button type="button" className="json-toggle" onClick={() => setShowJson(!showJson)}>
-                <span>结构化 JSON</span>
-                <span className={`json-arrow ${showJson ? "json-arrow--open" : ""}`}>▸</span>
+            <div className="action-bar">
+              <button type="button" className="btn btn--primary" onClick={handleGenerate} disabled={busy !== null}>
+                {busy === "gen" ? <><span className="spinner" /> 生成中…</> : <><span className="btn-icon">⚡</span> 生成预览</>}
               </button>
-              {showJson && <pre className="json-body">{JSON.stringify(active.card, null, 2)}</pre>}
+              <button type="button" className="btn btn--ghost" onClick={handleExport} disabled={!apisRef.current[active.id] || busy !== null}>
+                {busy === "export" ? <><span className="spinner" /> 导出中…</> : <><span className="btn-icon">📥</span> 导出 PNG</>}
+              </button>
             </div>
-          )}
+            {error && <p className="error-msg">{error}</p>}
+          </section>
         </aside>
 
         <section className="preview-area">
