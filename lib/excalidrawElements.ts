@@ -6,7 +6,7 @@
 
 import type { AppState, BinaryFiles } from "@excalidraw/excalidraw/types";
 import type { CardData, CardSection } from "@/lib/mockParser";
-import { getPreset, presetToCardStyle, type StylePreset } from "@/lib/stylePresets";
+import { getPreset, type StylePreset } from "@/lib/stylePresets";
 import { generateDecorations, highlightKeywords } from "@/lib/decorations";
 
 export type ExcalidrawSceneData = {
@@ -84,6 +84,21 @@ function renderTitle(sk: any[], title: string, w: number, y: number, p: StylePre
   const fs = p.typography.titleFontSize;
   const wrapped = wrap(title, 11);
   const h = estHeight(title, fs, 11);
+  const titleY = y; // 保存标题原始位置
+
+  // 马克笔高亮（在文字之前绘制，作为背景）
+  if (p.effects.markerHighlight && p.colors.highlight.length > 0) {
+    sk.push({
+      type: "rectangle",
+      x: w / 2 - 220, y: titleY - 8,
+      width: 440, height: h + 16,
+      strokeColor: "transparent",
+      backgroundColor: p.colors.highlight[0],
+      fillStyle: "solid", strokeWidth: 0, roughness: 1,
+      opacity: 35, roundness: { type: 3 },
+      groupIds: []
+    });
+  }
 
   // 标题文字
   sk.push({
@@ -106,7 +121,6 @@ function renderTitle(sk: any[], title: string, w: number, y: number, p: StylePre
       strokeWidth: p.border.width,
       roughness: p.border.roughness + 0.3
     });
-    // 第二条装饰线（彩色）
     if (p.decorations.density !== "low") {
       sk.push({
         type: "line", x: w / 2 - lineW / 2 + 20, y: y + 10,
@@ -118,20 +132,6 @@ function renderTitle(sk: any[], title: string, w: number, y: number, p: StylePre
       });
     }
     y += 30;
-  }
-
-  // 马克笔风格：标题下方大块高亮
-  if (p.effects.markerHighlight && p.colors.highlight.length > 0) {
-    sk.push({
-      type: "rectangle",
-      x: w / 2 - 220, y: y - h - 30,
-      width: 440, height: h + 20,
-      strokeColor: "transparent",
-      backgroundColor: p.colors.highlight[0],
-      fillStyle: "solid", strokeWidth: 0, roughness: 1,
-      opacity: 35, roundness: { type: 3 },
-      groupIds: []
-    });
   }
 
   return y + 30;
@@ -229,7 +229,7 @@ function renderBox(sk: any[], s: { text: string }, px: number, cw: number, y: nu
       sk.push({
         type: "rectangle",
         x: px + 10, y: y + h / 2 - 14,
-        width: Math.min(cw - 20, keywords.join("").length * p.typography.bodyFontSize * 0.6 + 40),
+        width: Math.min(cw - 20, keywords.join("").length * p.typography.bodyFontSize * 1.0 + 40),
         height: 28,
         strokeColor: "transparent",
         backgroundColor: p.colors.highlight[idx % p.colors.highlight.length],
@@ -291,7 +291,7 @@ function renderHighlight(sk: any[], s: { text: string }, px: number, cw: number,
     sk.push({
       type: "rectangle",
       x: px - 8, y: y - 8,
-      width: Math.min(cw + 16, s.text.length * fs * 0.55 + 40),
+      width: Math.min(cw + 16, s.text.length * fs * 1.0 + 40),
       height: h + 16,
       strokeColor: "transparent",
       backgroundColor: p.colors.highlight[0],
@@ -326,7 +326,7 @@ function renderHighlight(sk: any[], s: { text: string }, px: number, cw: number,
     sk.push({
       type: "ellipse",
       x: px - 12, y: y - 12,
-      width: Math.min(cw + 24, s.text.length * fs * 0.55 + 50),
+      width: Math.min(cw + 24, s.text.length * fs * 1.0 + 50),
       height: h + 24,
       strokeColor: p.colors.danger,
       backgroundColor: "transparent",
@@ -335,7 +335,7 @@ function renderHighlight(sk: any[], s: { text: string }, px: number, cw: number,
     });
   }
 
-  return h + 62;
+  return h + p.sectionGap;
 }
 
 function renderCircle(sk: any[], s: { text: string }, px: number, y: number, p: StylePreset) {
@@ -349,7 +349,7 @@ function renderCircle(sk: any[], s: { text: string }, px: number, y: number, p: 
     fillStyle: "hachure",
     label: { text: s.text, fontSize: p.typography.subtitleFontSize, fontFamily: p.typography.fontFamily, textAlign: "center", verticalAlign: "middle", strokeColor: p.colors.danger }
   });
-  return size + 20;
+  return size + p.sectionGap - 40;
 }
 
 function renderStrikethrough(sk: any[], s: { text: string }, px: number, cw: number, y: number, p: StylePreset) {
@@ -371,7 +371,7 @@ function renderStrikethrough(sk: any[], s: { text: string }, px: number, cw: num
     strokeWidth: p.border.width, roughness: p.border.roughness + 0.2
   });
 
-  return h + 48;
+  return h + p.sectionGap - 10;
 }
 
 function renderComparison(sk: any[], s: { left: { label: string; text: string }; right: { label: string; text: string } }, px: number, cw: number, y: number, p: StylePreset) {
@@ -427,7 +427,7 @@ function renderAnnotation(sk: any[], s: { text: string }, px: number, cw: number
     textAlign: "left", verticalAlign: "middle"
   });
 
-  return h + 40;
+  return h + p.sectionGap - 16;
 }
 
 // ============================================================

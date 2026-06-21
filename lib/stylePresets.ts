@@ -214,34 +214,3 @@ export const stylePresets: StylePreset[] = [
 export function getPreset(id: string): StylePreset {
   return stylePresets.find((p) => p.id === id) || stylePresets[0];
 }
-
-/** 兼容旧 CardStyle 接口 */
-export function presetToCardStyle(p: StylePreset) {
-  return {
-    id: p.id,
-    name: p.name,
-    description: p.description,
-    preview: p.preview,
-    background: p.background.color,
-    primary: p.colors.primary,
-    secondary: p.colors.secondary,
-    accent: p.colors.danger,
-    textOnLight: p.colors.ink,
-    textOnDark: "#ffffff",
-    fillStyle: "hachure" as const,
-    strokeWidth: p.border.width,
-    roughness: p.border.roughness,
-    fontFamily: p.typography.fontFamily,
-    fontSize: {
-      title: p.typography.titleFontSize,
-      subtitle: p.typography.subtitleFontSize,
-      body: p.typography.bodyFontSize,
-      label: p.typography.labelFontSize,
-      highlight: p.typography.highlightFontSize
-    },
-    labelFill: p.colors.labelBg,
-    boxFill: p.colors.boxBg,
-    sectionGap: p.sectionGap,
-    chipFg: p.chipFg
-  };
-}

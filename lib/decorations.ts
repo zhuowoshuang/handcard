@@ -135,13 +135,13 @@ function generateDoodles(p: StylePreset, w: number, h: number, rng: SeededRandom
 
   // 四角区域 + 标题附近区域
   const zones = [
-    { x1: 30, y1: 30, x2: 180, y2: 180 },       // 左上
-    { x1: w - 180, y1: 30, x2: w - 30, y2: 180 }, // 右上
-    { x1: 30, y1: h - 200, x2: 180, y2: h - 30 }, // 左下
-    { x1: w - 180, y1: h - 200, x2: w - 30, y2: h - 30 }, // 右下
-    { x1: w / 2 - 200, y1: 30, x2: w / 2 + 200, y2: 120 }, // 标题区域
-    { x1: 30, y1: 250, x2: 120, y2: h - 250 },   // 左侧边栏
-    { x1: w - 120, y1: 250, x2: w - 30, y2: h - 250 }, // 右侧边栏
+    { x1: 20, y1: 20, x2: 90, y2: 100 },          // 左上（内容区 px=110 之外）
+    { x1: w - 90, y1: 20, x2: w - 20, y2: 100 },   // 右上
+    { x1: 20, y1: h - 120, x2: 90, y2: h - 20 },   // 左下
+    { x1: w - 90, y1: h - 120, x2: w - 20, y2: h - 20 }, // 右下
+    { x1: w / 2 - 180, y1: 15, x2: w / 2 + 180, y2: 80 }, // 标题上方
+    { x1: 15, y1: 200, x2: 80, y2: h - 200 },      // 左侧边栏（< px=110）
+    { x1: w - 80, y1: 200, x2: w - 15, y2: h - 200 }, // 右侧边栏
   ];
 
   for (let i = 0; i < count; i++) {
@@ -392,7 +392,7 @@ function makeSticker(cx: number, cy: number, size: number, color: string, seed: 
     strokeWidth: 1, roughness: 2,
     opacity: 30,
     roundness: { type: 3 },
-    angle: ((Math.random() * 8 - 4) * Math.PI) / 180,
+    angle: (((seed % 8) - 4) * Math.PI) / 180,
     groupIds: [], seed
   };
 }

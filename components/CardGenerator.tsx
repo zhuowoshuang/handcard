@@ -208,7 +208,6 @@ export function CardGenerator() {
     return () => window.removeEventListener("keydown", handler);
   }, [handlePrev, handleNext]);
 
-  const getSlideTemplate = (tid: TemplateId) => templates.find((t) => t.id === tid) || templates[0];
   const getSlidePreset = (pid: PresetId) => getPreset(pid);
 
   return (
@@ -307,7 +306,6 @@ export function CardGenerator() {
           <div className="carousel-wrapper">
             <div className="carousel" ref={carouselRef} onScroll={handleScroll}>
               {slides.map((slide, idx) => {
-                const stpl = getSlideTemplate(slide.templateId);
                 const spreset = getSlidePreset(slide.presetId);
                 return (
                   <div key={slide.id} className={`carousel-card ${idx === activeIdx ? "carousel-card--active" : ""}`}
