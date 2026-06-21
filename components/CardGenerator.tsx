@@ -9,7 +9,7 @@ import {
   type CardData,
   type TemplateId
 } from "@/lib/mockParser";
-import { cardStyles, type StyleId } from "@/lib/cardStyles";
+import { stylePresets, getPreset, type PresetId } from "@/lib/stylePresets";
 import { buildExcalidrawScene, type ExcalidrawSceneData } from "@/lib/excalidrawElements";
 import { exportSceneToPng } from "@/lib/exportPng";
 
@@ -24,21 +24,19 @@ const W = 1080;
 const H = 1920;
 type SceneUpdate = Parameters<ExcalidrawImperativeAPI["updateScene"]>[0];
 
-// ── 单张幻灯片 ──
 type Slide = {
   id: string;
   card: CardData | null;
   scene: ExcalidrawSceneData;
   templateId: TemplateId;
-  styleId: StyleId;
+  presetId: PresetId;
   input: string;
 };
 
 const defaultTemplateId: TemplateId = "pain-point";
-const defaultStyleId: StyleId = "sketch";
+const defaultPresetId: PresetId = "classic-handdrawn";
 const defaultTpl = templates.find((t) => t.id === defaultTemplateId)!;
 
-// 用 ref 代替模块级变量，避免 SSR 水合不一致
 let _counter = 0;
 const newSlideId = () => `s${++_counter}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -48,15 +46,13 @@ function createEmptySlide(): Slide {
     card: null,
     scene: { elements: [], appState: { viewBackgroundColor: "#ffffff", currentItemFontFamily: 1, currentItemStrokeColor: "#111111" } },
     templateId: defaultTemplateId,
-    styleId: defaultStyleId,
+    presetId: defaultPresetId,
     input: defaultTpl.defaultInput
   };
 }
 
-// 风格背景色缓存
-const styleBgMap = Object.fromEntries(cardStyles.map((s) => [s.id, s.background]));
-
-// ============================================================
+// 背景色缓存
+const presetBgMap = Object.fromEntries(stylePresets.map((p) => [p.id, p.background.color]));
 
 export function CardGenerator() {
   const [slides, setSlides] = useState<Slide[]>([createEmptySlide()]);
@@ -67,38 +63,31 @@ export function CardGenerator() {
   const [zoom, setZoom] = useState(50);
   const carouselRef = useRef<HTMLDivElement>(null);
 
-  // BUG-2 修复: 用 ref 存 apis，避免闭包捕获过期引用
   const apisRef = useRef<Record<string, ExcalidrawImperativeAPI>>({});
-  // 用于触发依赖 apis 的回调重建
   const [apisVersion, setApisVersion] = useState(0);
 
   const active = slides[activeIdx] || slides[0];
   const currentTemplate = templates.find((t) => t.id === active.templateId) || templates[0];
 
-  // ── 注册 Excalidraw API ──
   const handleApi = useCallback((slideId: string, api: ExcalidrawImperativeAPI) => {
     apisRef.current[slideId] = api;
     setApisVersion((v) => v + 1);
   }, []);
 
-  // ── 更新活动 slide ──
   const updateActive = useCallback((patch: Partial<Slide>) => {
     setSlides((prev) => prev.map((s, i) => (i === activeIdx ? { ...s, ...patch } : s)));
   }, [activeIdx]);
 
-  // ── 切换模板 ──
   const handleSelectTemplate = useCallback((id: TemplateId) => {
     const tpl = templates.find((t) => t.id === id)!;
     updateActive({ templateId: id, input: tpl.defaultInput, card: null });
     setError(null);
   }, [updateActive]);
 
-  // ── 切换风格 ──
-  const handleSelectStyle = useCallback((id: StyleId) => {
-    updateActive({ styleId: id });
+  const handleSelectPreset = useCallback((id: PresetId) => {
+    updateActive({ presetId: id });
   }, [updateActive]);
 
-  // ── 生成当前卡片 ──
   const handleGenerate = useCallback(() => {
     setBusy("gen");
     setError(null);
@@ -112,7 +101,6 @@ export function CardGenerator() {
     }
   }, [active.input, active.templateId, updateActive]);
 
-  // ── 同步场景（card / styleId / apis 变化时）──
   useEffect(() => {
     if (!active.card) return;
     const slideId = active.id;
@@ -120,11 +108,9 @@ export function CardGenerator() {
 
     (async () => {
       try {
-        const next = await buildExcalidrawScene(active.card!, { width: W, height: H }, active.styleId);
+        const next = await buildExcalidrawScene(active.card!, { width: W, height: H }, active.presetId);
         if (cancelled) return;
-
         setSlides((prev) => prev.map((s) => (s.id === slideId ? { ...s, scene: next } : s)));
-
         const api = apisRef.current[slideId];
         if (api) {
           api.updateScene({ elements: next.elements, appState: next.appState as SceneUpdate["appState"] } as SceneUpdate);
@@ -140,10 +126,8 @@ export function CardGenerator() {
     })();
 
     return () => { cancelled = true; };
-    // apisVersion 确保 API 注册后也能触发
-  }, [active.card, active.styleId, active.id, apisVersion]);
+  }, [active.card, active.presetId, active.id, apisVersion]);
 
-  // ── 缩放（读 apisRef，无过期闭包）──
   const handleZoomChange = useCallback((value: number) => {
     setZoom(value);
     const api = apisRef.current[active.id];
@@ -158,7 +142,6 @@ export function CardGenerator() {
     try { api.scrollToContent(api.getSceneElements(), { fitToContent: true }); } catch {}
   }, [active.id, apisVersion]);
 
-  // ── 导出 ──
   const handleExport = useCallback(async () => {
     const api = apisRef.current[active.id];
     if (!api) return;
@@ -177,11 +160,9 @@ export function CardGenerator() {
     }
   }, [active.id, active.card?.title, apisVersion]);
 
-  // ── 新增幻灯片 ──
   const handleAddSlide = useCallback(() => {
     setSlides((prev) => {
       const next = [...prev, createEmptySlide()];
-      // 滚动到最后一个
       requestAnimationFrame(() => {
         const el = carouselRef.current;
         if (el) el.scrollTo({ left: el.scrollWidth, behavior: "smooth" });
@@ -190,7 +171,6 @@ export function CardGenerator() {
     });
   }, []);
 
-  // ── 删除当前幻灯片（清理 apis ref）──
   const handleDeleteSlide = useCallback(() => {
     if (slides.length <= 1) return;
     const deletedId = slides[activeIdx].id;
@@ -199,7 +179,6 @@ export function CardGenerator() {
     setActiveIdx((prev) => Math.max(0, prev - 1));
   }, [slides.length, activeIdx, slides]);
 
-  // ── 导航 ──
   const scrollToSlide = useCallback((idx: number) => {
     setActiveIdx(idx);
     const el = carouselRef.current;
@@ -208,15 +187,9 @@ export function CardGenerator() {
     if (card) el.scrollTo({ left: card.offsetLeft - 24, behavior: "smooth" });
   }, []);
 
-  const handlePrev = useCallback(() => {
-    if (activeIdx > 0) scrollToSlide(activeIdx - 1);
-  }, [activeIdx, scrollToSlide]);
+  const handlePrev = useCallback(() => { if (activeIdx > 0) scrollToSlide(activeIdx - 1); }, [activeIdx, scrollToSlide]);
+  const handleNext = useCallback(() => { if (activeIdx < slides.length - 1) scrollToSlide(activeIdx + 1); }, [activeIdx, slides.length, scrollToSlide]);
 
-  const handleNext = useCallback(() => {
-    if (activeIdx < slides.length - 1) scrollToSlide(activeIdx + 1);
-  }, [activeIdx, slides.length, scrollToSlide]);
-
-  // ── 滚动检测 ──
   const handleScroll = useCallback(() => {
     const el = carouselRef.current;
     if (!el) return;
@@ -224,7 +197,6 @@ export function CardGenerator() {
     if (idx !== activeIdx && idx >= 0 && idx < slides.length) setActiveIdx(idx);
   }, [activeIdx, slides.length]);
 
-  // ── 键盘左右箭头（UX-3: 忽略 textarea 内的按键）──
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
@@ -236,8 +208,8 @@ export function CardGenerator() {
     return () => window.removeEventListener("keydown", handler);
   }, [handlePrev, handleNext]);
 
-  // ── 辅助：获取某个 slide 的模板信息 ──
   const getSlideTemplate = (tid: TemplateId) => templates.find((t) => t.id === tid) || templates[0];
+  const getSlidePreset = (pid: PresetId) => getPreset(pid);
 
   return (
     <div className="app-layout">
@@ -251,8 +223,8 @@ export function CardGenerator() {
       </header>
 
       <main className="app-main">
-        {/* ─── 左侧面板 ─── */}
         <aside className="sidebar">
+          {/* ── 模板 ── */}
           <section className="sidebar-section">
             <h2 className="sidebar-heading">内容模板</h2>
             <div className="template-grid">
@@ -268,22 +240,24 @@ export function CardGenerator() {
             </div>
           </section>
 
+          {/* ── 视觉风格 ── */}
           <section className="sidebar-section">
             <h2 className="sidebar-heading">视觉风格</h2>
             <div className="style-strip">
-              {cardStyles.map((s) => (
-                <button type="button" key={s.id}
-                  className={`style-chip ${active.styleId === s.id ? "style-chip--active" : ""}`}
-                  onClick={() => handleSelectStyle(s.id)}
-                  title={s.description}
-                  style={active.styleId === s.id ? { background: s.accent, color: s.chipFg } : undefined}>
-                  <span className="style-chip-icon">{s.preview}</span>
-                  <span className="style-chip-name">{s.name}</span>
+              {stylePresets.map((p) => (
+                <button type="button" key={p.id}
+                  className={`style-chip ${active.presetId === p.id ? "style-chip--active" : ""}`}
+                  onClick={() => handleSelectPreset(p.id)}
+                  title={p.description}
+                  style={active.presetId === p.id ? { background: p.colors.danger, color: p.chipFg } : undefined}>
+                  <span className="style-chip-icon">{p.preview}</span>
+                  <span className="style-chip-name">{p.name}</span>
                 </button>
               ))}
             </div>
           </section>
 
+          {/* ── 输入 ── */}
           <section className="sidebar-section sidebar-section--grow">
             <h2 className="sidebar-heading">输入文案</h2>
             <textarea className="input-area" value={active.input}
@@ -291,6 +265,7 @@ export function CardGenerator() {
               placeholder={currentTemplate.placeholder} spellCheck={false} />
           </section>
 
+          {/* ── 按钮 ── */}
           <div className="action-bar">
             <button type="button" className="btn btn--primary" onClick={handleGenerate} disabled={busy !== null}>
               {busy === "gen" ? <><span className="spinner" /> 生成中…</> : <><span className="btn-icon">⚡</span> 生成预览</>}
@@ -313,7 +288,6 @@ export function CardGenerator() {
           )}
         </aside>
 
-        {/* ─── 右侧 PPT 预览 ─── */}
         <section className="preview-area">
           <div className="preview-toolbar">
             <button type="button" className="zoom-btn" onClick={handlePrev} disabled={activeIdx === 0} title="上一页">◀</button>
@@ -334,10 +308,11 @@ export function CardGenerator() {
             <div className="carousel" ref={carouselRef} onScroll={handleScroll}>
               {slides.map((slide, idx) => {
                 const stpl = getSlideTemplate(slide.templateId);
+                const spreset = getSlidePreset(slide.presetId);
                 return (
                   <div key={slide.id} className={`carousel-card ${idx === activeIdx ? "carousel-card--active" : ""}`}
                     onClick={() => scrollToSlide(idx)}>
-                    <div className="carousel-canvas" style={{ background: styleBgMap[slide.styleId] || "#fff" }}>
+                    <div className="carousel-canvas" style={{ background: presetBgMap[slide.presetId] || "#fff" }}>
                       {slide.card ? (
                         <ExcalidrawCanvas
                           excalidrawAPI={(api) => handleApi(slide.id, api)}
@@ -363,7 +338,7 @@ export function CardGenerator() {
                     <div className="carousel-footer">
                       <span className="carousel-page">{idx + 1}</span>
                       <span className="carousel-title">{slide.card?.title || "未生成"}</span>
-                      <span className="carousel-meta">{stpl.icon} {stpl.name}</span>
+                      <span className="carousel-meta">{spreset.preview} {spreset.name}</span>
                     </div>
                   </div>
                 );
