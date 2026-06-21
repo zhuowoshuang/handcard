@@ -54,6 +54,10 @@ function createEmptySlide(): Slide {
 // 背景色缓存
 const presetBgMap = Object.fromEntries(stylePresets.map((p) => [p.id, p.background.color]));
 
+// zoom 值 → slider 值 的反向映射
+const zoomToSlider = (z: number) => Math.min(100, Math.max(0, 100 * Math.log(z / 0.1) / Math.log(30)));
+const sliderToZoom = (v: number) => 0.1 * Math.pow(30, v / 100);
+
 export function CardGenerator() {
   const [slides, setSlides] = useState<Slide[]>([createEmptySlide()]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -64,7 +68,11 @@ export function CardGenerator() {
   const carouselRef = useRef<HTMLDivElement>(null);
 
   const apisRef = useRef<Record<string, ExcalidrawImperativeAPI>>({});
+  // 每张 slide 的 zoom 值（slider 值，0-100）
+  const zoomsRef = useRef<Record<string, number>>({});
   const [apisVersion, setApisVersion] = useState(0);
+  // 上一次 activeIdx，用于检测切换
+  const prevIdxRef = useRef(0);
 
   const active = slides[activeIdx] || slides[0];
   const currentTemplate = templates.find((t) => t.id === active.templateId) || templates[0];
@@ -101,6 +109,7 @@ export function CardGenerator() {
     }
   }, [active.input, active.templateId, updateActive]);
 
+  // ── 生成后同步场景 + 自动适配 ──
   useEffect(() => {
     if (!active.card) return;
     const slideId = active.id;
@@ -114,10 +123,20 @@ export function CardGenerator() {
         const api = apisRef.current[slideId];
         if (api) {
           api.updateScene({ elements: next.elements, appState: next.appState as SceneUpdate["appState"] } as SceneUpdate);
+          // 自动适配到最佳比例
           requestAnimationFrame(() => {
-            if (!cancelled) {
-              try { api.scrollToContent(api.getSceneElements(), { fitToContent: true }); } catch {}
-            }
+            if (cancelled) return;
+            try {
+              api.scrollToContent(api.getSceneElements(), { fitToContent: true });
+              // 读取适配后的 zoom 并保存
+              const currentZoom = api.getAppState().zoom.value;
+              const sliderVal = zoomToSlider(currentZoom);
+              zoomsRef.current[slideId] = sliderVal;
+              // 如果当前正在看这张 slide，更新 slider 显示
+              if (slides[activeIdx]?.id === slideId) {
+                setZoom(sliderVal);
+              }
+            } catch {}
           });
         }
       } catch (e) {
@@ -126,22 +145,63 @@ export function CardGenerator() {
     })();
 
     return () => { cancelled = true; };
-  }, [active.card, active.presetId, active.id, apisVersion]);
+  }, [active.card, active.presetId, active.id]);
 
+  // ── 切换 slide 时恢复该 slide 的 zoom ──
+  useEffect(() => {
+    if (prevIdxRef.current === activeIdx) return;
+    prevIdxRef.current = activeIdx;
+
+    const slideId = slides[activeIdx]?.id;
+    if (!slideId) return;
+
+    const savedZoom = zoomsRef.current[slideId];
+    const api = apisRef.current[slideId];
+
+    if (savedZoom !== undefined) {
+      // 有保存的 zoom，恢复它
+      setZoom(savedZoom);
+      if (api) {
+        const z = sliderToZoom(savedZoom);
+        api.updateScene({ appState: { zoom: { value: z as any } } } as SceneUpdate);
+      }
+    } else if (api) {
+      // 没有保存的 zoom（新 slide），自动适配
+      try {
+        api.scrollToContent(api.getSceneElements(), { fitToContent: true });
+        const currentZoom = api.getAppState().zoom.value;
+        const sliderVal = zoomToSlider(currentZoom);
+        zoomsRef.current[slideId] = sliderVal;
+        setZoom(sliderVal);
+      } catch {}
+    }
+  }, [activeIdx, slides]);
+
+  // ── 缩放 ──
   const handleZoomChange = useCallback((value: number) => {
     setZoom(value);
+    const slideId = slides[activeIdx]?.id;
+    if (slideId) zoomsRef.current[slideId] = value;
     const api = apisRef.current[active.id];
     if (!api) return;
-    const z = 0.1 * Math.pow(30, value / 100);
+    const z = sliderToZoom(value);
     api.updateScene({ appState: { zoom: { value: z as any } } } as SceneUpdate);
-  }, [active.id, apisVersion]);
+  }, [active.id, activeIdx, slides]);
 
+  // ── 一键适配 ──
   const handleFit = useCallback(() => {
     const api = apisRef.current[active.id];
     if (!api) return;
-    try { api.scrollToContent(api.getSceneElements(), { fitToContent: true }); } catch {}
-  }, [active.id, apisVersion]);
+    try {
+      api.scrollToContent(api.getSceneElements(), { fitToContent: true });
+      const currentZoom = api.getAppState().zoom.value;
+      const sliderVal = zoomToSlider(currentZoom);
+      zoomsRef.current[active.id] = sliderVal;
+      setZoom(sliderVal);
+    } catch {}
+  }, [active.id]);
 
+  // ── 导出 ──
   const handleExport = useCallback(async () => {
     const api = apisRef.current[active.id];
     if (!api) return;
@@ -158,8 +218,9 @@ export function CardGenerator() {
     } finally {
       setBusy(null);
     }
-  }, [active.id, active.card?.title, apisVersion]);
+  }, [active.id, active.card?.title]);
 
+  // ── 新增/删除 slide ──
   const handleAddSlide = useCallback(() => {
     setSlides((prev) => {
       const next = [...prev, createEmptySlide()];
@@ -175,10 +236,12 @@ export function CardGenerator() {
     if (slides.length <= 1) return;
     const deletedId = slides[activeIdx].id;
     delete apisRef.current[deletedId];
+    delete zoomsRef.current[deletedId];
     setSlides((prev) => prev.filter((_, i) => i !== activeIdx));
     setActiveIdx((prev) => Math.max(0, prev - 1));
   }, [slides.length, activeIdx, slides]);
 
+  // ── 导航 ──
   const scrollToSlide = useCallback((idx: number) => {
     setActiveIdx(idx);
     const el = carouselRef.current;
